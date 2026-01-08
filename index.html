@@ -1,62 +1,444 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Neon Snake</title>
+    <!-- Tailwind CSS (via CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    
     <style>
-      body {
-        font-family: 'Share Tech Mono', monospace;
-        background-color: #000;
-        overflow: hidden;
-      }
-      .font-cyber {
-        font-family: 'Orbitron', sans-serif;
-      }
-      /* Custom scrollbar hide */
-      .no-scrollbar::-webkit-scrollbar {
-        display: none;
-      }
-      .no-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
-      /* CRT Scanline Effect */
-      .scanlines {
-        background: linear-gradient(
-          to bottom,
-          rgba(255,255,255,0),
-          rgba(255,255,255,0) 50%,
-          rgba(0,0,0,0.2) 50%,
-          rgba(0,0,0,0.2)
-        );
-        background-size: 100% 4px;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        pointer-events: none;
-        z-index: 50;
-      }
+        body {
+            font-family: 'Share Tech Mono', monospace;
+            background-color: #020617; /* slate-950 */
+            overflow: hidden;
+            touch-action: none; /* Prevent pull-to-refresh on mobile */
+        }
+        .font-cyber {
+            font-family: 'Orbitron', sans-serif;
+        }
+        /* CRT Scanline Effect */
+        .scanlines {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.2) 50%,
+                rgba(0,0,0,0.2)
+            );
+            background-size: 100% 4px;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            z-index: 50;
+        }
+        /* Custom Clip Path for Buttons */
+        .clip-slant {
+            clip-path: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%);
+        }
+        /* Canvas specific styling */
+        #gameCanvas {
+            box-shadow: 0 0 50px -10px rgba(57,255,20,0.15);
+        }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0"
-  }
-}
-</script>
 </head>
-  <body>
-    <div id="root"></div>
+<body class="text-slate-200 flex flex-col items-center justify-center min-h-screen relative select-none">
+
+    <!-- Ambient Glows -->
+    <div class="absolute top-0 left-1/4 w-96 h-96 bg-green-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+    <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-pink-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+    
+    <!-- Scanlines Overlay -->
     <div class="scanlines"></div>
-  </body>
+
+    <!-- UI Header -->
+    <div class="z-10 w-full max-w-[500px] px-4 flex justify-between items-end mb-4 font-mono text-[#39ff14] relative">
+        <div>
+            <h1 class="font-cyber text-4xl md:text-5xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-[#39ff14] to-emerald-600 drop-shadow-[0_0_10px_rgba(57,255,20,0.5)]">
+                NEO<span class="text-white">SNAKE</span>
+            </h1>
+            <div class="flex items-center gap-2 mt-2 opacity-80 text-sm">
+                <span class="w-2 h-2 bg-[#39ff14] rounded-full animate-pulse"></span>
+                SYSTEM_ONLINE
+            </div>
+        </div>
+
+        <div class="flex flex-col items-end gap-1">
+           <div class="text-[10px] text-slate-400 uppercase tracking-widest">Score Data</div>
+           <div class="flex items-center gap-4">
+             <div class="flex flex-col items-end">
+               <span class="text-[10px] text-slate-500">SESSION</span>
+               <span id="scoreDisplay" class="text-3xl font-bold font-cyber tabular-nums leading-none drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]">0000</span>
+             </div>
+             <div class="flex flex-col items-end opacity-50">
+                <span class="text-[10px] text-slate-500">RECORD</span>
+                <span id="highScoreDisplay" class="text-xl font-bold font-cyber tabular-nums leading-none">0000</span>
+             </div>
+           </div>
+        </div>
+    </div>
+
+    <!-- Game Container -->
+    <div class="relative z-10 group">
+        <!-- Canvas Layer -->
+        <canvas id="gameCanvas" width="500" height="500" class="bg-slate-900/90 border-2 border-slate-800 rounded-sm block max-w-[90vw] max-h-[90vw]"></canvas>
+
+        <!-- Start Screen Overlay -->
+        <div id="startScreen" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-sm">
+            <div class="text-center px-4">
+                <div class="w-12 h-12 text-[#39ff14] mx-auto mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                </div>
+                <h2 class="text-2xl md:text-3xl font-cyber text-white mb-8 tracking-wider">READY PLAYER ONE</h2>
+                <button onclick="startGame()" class="clip-slant px-8 py-4 bg-[#39ff14] hover:bg-[#32d611] text-black font-black font-cyber text-lg tracking-widest transition-transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2 mx-auto">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="black" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    INITIALIZE
+                </button>
+                <div class="mt-8 text-xs text-slate-500 font-mono">
+                    <p>ARROWS / WASD / TOUCH</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Over Overlay -->
+        <div id="gameOverScreen" class="hidden absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
+            <div class="border border-red-500/50 p-6 bg-slate-900/90 relative overflow-hidden text-center max-w-[85%]">
+                <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent animate-pulse"></div>
+                <div class="w-12 h-12 text-red-500 mx-auto mb-4 animate-bounce">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><path d="M8 20v2h8v-2"/><path d="m12.5 17-.5-1-.5 1h1z"/><path d="M16 20a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20"/></svg>
+                </div>
+                <h2 class="text-3xl md:text-4xl font-cyber font-bold text-white mb-2 tracking-widest drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">
+                    CRITICAL<br>FAILURE
+                </h2>
+                <p class="text-slate-400 font-mono mb-6">SYSTEM TERMINATED</p>
+                <div class="flex flex-col gap-1 mb-6">
+                   <span class="text-xs text-slate-500 uppercase">Final Score</span>
+                   <span id="finalScoreDisplay" class="text-3xl font-bold text-[#39ff14] font-cyber">0</span>
+                </div>
+                <button onclick="startGame()" class="clip-slant px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-bold font-cyber tracking-widest transition-transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2 mx-auto">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    REBOOT
+                </button>
+            </div>
+        </div>
+
+        <!-- Corners -->
+        <div class="absolute -top-1 -left-1 w-6 h-6 border-t-2 border-l-2 border-[#39ff14] rounded-tl-sm pointer-events-none"></div>
+        <div class="absolute -top-1 -right-1 w-6 h-6 border-t-2 border-r-2 border-[#39ff14] rounded-tr-sm pointer-events-none"></div>
+        <div class="absolute -bottom-1 -left-1 w-6 h-6 border-b-2 border-l-2 border-[#39ff14] rounded-bl-sm pointer-events-none"></div>
+        <div class="absolute -bottom-1 -right-1 w-6 h-6 border-b-2 border-r-2 border-[#39ff14] rounded-br-sm pointer-events-none"></div>
+    </div>
+
+    <!-- Mobile Controls -->
+    <div class="mt-6 grid grid-cols-3 gap-3 w-full max-w-[300px] z-20">
+        <div></div>
+        <button onpointerdown="handleInput('UP', event)" class="h-16 bg-slate-900/80 border border-[#39ff14]/30 rounded-lg active:bg-[#39ff14] active:text-black text-[#39ff14] flex items-center justify-center transition-all backdrop-blur-sm touch-manipulation">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
+        </button>
+        <div></div>
+
+        <button onpointerdown="handleInput('LEFT', event)" class="h-16 bg-slate-900/80 border border-[#39ff14]/30 rounded-lg active:bg-[#39ff14] active:text-black text-[#39ff14] flex items-center justify-center transition-all backdrop-blur-sm touch-manipulation">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <button onpointerdown="handleInput('DOWN', event)" class="h-16 bg-slate-900/80 border border-[#39ff14]/30 rounded-lg active:bg-[#39ff14] active:text-black text-[#39ff14] flex items-center justify-center transition-all backdrop-blur-sm touch-manipulation">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <button onpointerdown="handleInput('RIGHT', event)" class="h-16 bg-slate-900/80 border border-[#39ff14]/30 rounded-lg active:bg-[#39ff14] active:text-black text-[#39ff14] flex items-center justify-center transition-all backdrop-blur-sm touch-manipulation">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+    </div>
+
+    <script>
+        // --- CONSTANTS ---
+        const GRID_SIZE = 25;
+        const INITIAL_SPEED = 130;
+        const MIN_SPEED = 40;
+        const SPEED_DECREMENT = 8;
+        const FOOD_THRESHOLD = 5;
+
+        // --- STATE ---
+        let canvas, ctx;
+        let gridSizePx;
+        let snake = [];
+        let food = {};
+        let direction = { x: 0, y: -1 };
+        let nextDirection = { x: 0, y: -1 };
+        let score = 0;
+        let highScore = localStorage.getItem('cyber_snake_highscore') || 0;
+        let speed = INITIAL_SPEED;
+        let gameLoopId;
+        let isPlaying = false;
+        let lastTime = 0;
+        let accumulateTime = 0;
+
+        // --- INITIALIZATION ---
+        window.onload = () => {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            document.addEventListener('keydown', handleKeyInput);
+            updateScoreUI();
+        };
+
+        function resizeCanvas() {
+            // Make canvas crisp
+            const size = Math.min(window.innerWidth * 0.9, 500);
+            canvas.style.width = size + "px";
+            canvas.style.height = size + "px";
+            // Set actual render resolution matches CSS
+            canvas.width = 500;
+            canvas.height = 500;
+            gridSizePx = canvas.width / GRID_SIZE;
+            if(!isPlaying && snake.length > 0) draw(); // Redraw if paused/over
+        }
+
+        function startGame() {
+            snake = [
+                { x: 10, y: 10 },
+                { x: 10, y: 11 },
+                { x: 10, y: 12 }
+            ];
+            direction = { x: 0, y: -1 };
+            nextDirection = { x: 0, y: -1 };
+            score = 0;
+            speed = INITIAL_SPEED;
+            spawnFood();
+            
+            isPlaying = true;
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            updateScoreUI();
+
+            if (gameLoopId) cancelAnimationFrame(gameLoopId);
+            lastTime = performance.now();
+            accumulateTime = 0;
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        // --- GAME LOOP ---
+        function gameLoop(timestamp) {
+            if (!isPlaying) return;
+
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+            accumulateTime += deltaTime;
+
+            if (accumulateTime >= speed) {
+                accumulateTime = 0; // Reset or subtract speed for more precision, reset is safer for snake
+                update();
+                draw();
+            }
+
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        function update() {
+            // Update Direction
+            direction = nextDirection;
+
+            // Move Head
+            const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
+
+            // Wall Collision
+            if (head.x < 0 || head.x >= GRID_SIZE || head.y < 0 || head.y >= GRID_SIZE) {
+                return gameOver();
+            }
+
+            // Self Collision
+            for (let i = 0; i < snake.length; i++) {
+                if (head.x === snake[i].x && head.y === snake[i].y) {
+                    return gameOver();
+                }
+            }
+
+            snake.unshift(head);
+
+            // Food Collision
+            if (head.x === food.x && head.y === food.y) {
+                score += 10;
+                
+                // Speed Increase Logic
+                const foodsEaten = score / 10;
+                if (foodsEaten > 0 && foodsEaten % FOOD_THRESHOLD === 0) {
+                    speed = Math.max(MIN_SPEED, speed - SPEED_DECREMENT);
+                }
+
+                updateScoreUI();
+                spawnFood();
+            } else {
+                snake.pop();
+            }
+        }
+
+        function draw() {
+            // Clear Background
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'; // Slate-900 with transparency trail? No, solid for clear gameplay
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Grid Lines (Subtle)
+            ctx.strokeStyle = '#39ff14';
+            ctx.lineWidth = 0.5;
+            ctx.globalAlpha = 0.05;
+            ctx.beginPath();
+            for(let i=0; i<=GRID_SIZE; i++) {
+                ctx.moveTo(i * gridSizePx, 0);
+                ctx.lineTo(i * gridSizePx, canvas.height);
+                ctx.moveTo(0, i * gridSizePx);
+                ctx.lineTo(canvas.width, i * gridSizePx);
+            }
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+
+            // Draw Food
+            ctx.fillStyle = '#ff00ff';
+            ctx.shadowColor = '#ff00ff';
+            ctx.shadowBlur = 15;
+            const fp = getPixel(food);
+            // Draw diamond shape for food
+            ctx.beginPath();
+            ctx.moveTo(fp.x + fp.w/2, fp.y + 4);
+            ctx.lineTo(fp.x + fp.w - 4, fp.y + fp.h/2);
+            ctx.lineTo(fp.x + fp.w/2, fp.y + fp.h - 4);
+            ctx.lineTo(fp.x + 4, fp.y + fp.h/2);
+            ctx.fill();
+            
+            // Draw Snake
+            snake.forEach((segment, index) => {
+                const sp = getPixel(segment);
+                const isHead = index === 0;
+
+                if (isHead) {
+                    ctx.fillStyle = '#39ff14';
+                    ctx.shadowColor = '#39ff14';
+                    ctx.shadowBlur = 20;
+                    ctx.fillRect(sp.x + 1, sp.y + 1, sp.w - 2, sp.h - 2);
+                    
+                    // Eyes
+                    ctx.fillStyle = '#000';
+                    ctx.shadowBlur = 0;
+                    const eyeSize = sp.w * 0.2;
+                    let eyeX1, eyeY1, eyeX2, eyeY2;
+                    
+                    // Simple logic to place eyes based on direction
+                    if (direction.y === -1) { // Up
+                        eyeX1 = sp.x + sp.w*0.2; eyeY1 = sp.y + sp.h*0.2;
+                        eyeX2 = sp.x + sp.w*0.6; eyeY2 = sp.y + sp.h*0.2;
+                    } else if (direction.y === 1) { // Down
+                        eyeX1 = sp.x + sp.w*0.2; eyeY1 = sp.y + sp.h*0.6;
+                        eyeX2 = sp.x + sp.w*0.6; eyeY2 = sp.y + sp.h*0.6;
+                    } else if (direction.x === -1) { // Left
+                        eyeX1 = sp.x + sp.w*0.2; eyeY1 = sp.y + sp.h*0.2;
+                        eyeX2 = sp.x + sp.w*0.2; eyeY2 = sp.y + sp.h*0.6;
+                    } else { // Right
+                        eyeX1 = sp.x + sp.w*0.6; eyeY1 = sp.y + sp.h*0.2;
+                        eyeX2 = sp.x + sp.w*0.6; eyeY2 = sp.y + sp.h*0.6;
+                    }
+                    ctx.fillRect(eyeX1, eyeY1, eyeSize, eyeSize);
+                    ctx.fillRect(eyeX2, eyeY2, eyeSize, eyeSize);
+
+                } else {
+                    // Body with Trail Effect
+                    // Opacity decreases down the tail
+                    const opacity = Math.max(0.3, 1 - (index / (snake.length + 5)));
+                    ctx.fillStyle = `rgba(44, 176, 26, ${opacity})`;
+                    
+                    // Glow only on first few segments
+                    if (index < 5) {
+                        ctx.shadowColor = `rgba(57, 255, 20, 0.5)`;
+                        ctx.shadowBlur = 10 - index;
+                    } else {
+                        ctx.shadowBlur = 0;
+                    }
+                    
+                    // Slightly smaller body segments
+                    ctx.fillRect(sp.x + 2, sp.y + 2, sp.w - 4, sp.h - 4);
+                }
+            });
+            
+            // Reset Shadow
+            ctx.shadowBlur = 0;
+        }
+
+        function getPixel(gridPoint) {
+            return {
+                x: gridPoint.x * gridSizePx,
+                y: gridPoint.y * gridSizePx,
+                w: gridSizePx,
+                h: gridSizePx
+            };
+        }
+
+        function spawnFood() {
+            let valid = false;
+            while (!valid) {
+                food = {
+                    x: Math.floor(Math.random() * GRID_SIZE),
+                    y: Math.floor(Math.random() * GRID_SIZE)
+                };
+                valid = !snake.some(s => s.x === food.x && s.y === food.y);
+            }
+        }
+
+        function gameOver() {
+            isPlaying = false;
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('cyber_snake_highscore', highScore);
+            }
+            updateScoreUI();
+            document.getElementById('finalScoreDisplay').innerText = score;
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+        }
+
+        function updateScoreUI() {
+            document.getElementById('scoreDisplay').innerText = score.toString().padStart(4, '0');
+            document.getElementById('highScoreDisplay').innerText = highScore.toString().padStart(4, '0');
+        }
+
+        // --- CONTROLS ---
+        function handleKeyInput(e) {
+            if (!isPlaying) return;
+            switch(e.key) {
+                case 'ArrowUp': case 'w': case 'W': changeDirection(0, -1); break;
+                case 'ArrowDown': case 's': case 'S': changeDirection(0, 1); break;
+                case 'ArrowLeft': case 'a': case 'A': changeDirection(-1, 0); break;
+                case 'ArrowRight': case 'd': case 'D': changeDirection(1, 0); break;
+            }
+        }
+
+        function handleInput(dir, e) {
+            if (e) e.preventDefault(); // Stop mouse/touch defaults
+            if (!isPlaying) return;
+            switch(dir) {
+                case 'UP': changeDirection(0, -1); break;
+                case 'DOWN': changeDirection(0, 1); break;
+                case 'LEFT': changeDirection(-1, 0); break;
+                case 'RIGHT': changeDirection(1, 0); break;
+            }
+        }
+
+        function changeDirection(dx, dy) {
+            // Prevent 180 turns based on CURRENT render direction (direction) NOT nextDirection
+            // This prevents the "quick double key press" death glitch
+            if (dx === 1 && direction.x === -1) return;
+            if (dx === -1 && direction.x === 1) return;
+            if (dy === 1 && direction.y === -1) return;
+            if (dy === -1 && direction.y === 1) return;
+            
+            // Also prevent modifying nextDirection multiple times in one tick to opposite
+            if (dx === 1 && nextDirection.x === -1) return;
+            if (dx === -1 && nextDirection.x === 1) return;
+            if (dy === 1 && nextDirection.y === -1) return;
+            if (dy === -1 && nextDirection.y === 1) return;
+
+            nextDirection = { x: dx, y: dy };
+        }
+
+    </script>
+</body>
 </html>
